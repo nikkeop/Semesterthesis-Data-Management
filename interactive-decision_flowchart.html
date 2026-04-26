@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Challenge → Requirement → Solution Flowchart</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <style>
+    /* ── Theme variables ───────────────────────────────────────────── */
+    body {
+      --bg:           #f7f6f3;
+      --text:         #333;
+      --text-muted:   #777;
+      --tooltip-bg:   #fff;
+      --tooltip-bdr:  #ccc;
+      --tooltip-txt:  #333;
+      --edge-cr:      #6a9ec0;
+      --edge-rs:      #5aaa78;
+      --dim:          0.12;
+    }
+    body.dark {
+      --bg:           #1a1a1a;
+      --text:         #ccc;
+      --text-muted:   #888;
+      --tooltip-bg:   #2b2b2b;
+      --tooltip-bdr:  #555;
+      --tooltip-txt:  #ddd;
+      --edge-cr:      #4A7FA5;
+      --edge-rs:      #3D8F56;
+      --dim:          0.15;
+    }
+
+    /* ── Base ──────────────────────────────────────────────────────── */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px 20px 10px;
+      background: var(--bg);
+      font-family: Helvetica, Arial, sans-serif;
+      color: var(--text);
+      transition: background 0.25s, color 0.25s;
+    }
+
+    /* ── Header row ────────────────────────────────────────────────── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin-bottom: 6px;
+    }
+    h2 {
+      font-size: 14px;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin: 0;
+    }
+    #toggle-btn {
+      position: absolute;
+      right: 0;
+      background: none;
+      border: 1px solid var(--tooltip-bdr);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    #toggle-btn:hover { background: var(--tooltip-bdr); }
+
+    /* ── Export dropdown ───────────────────────────────────────────── */
+    .export-wrap {
+      position: absolute;
+      left: 0;
+    }
+    .export-wrap summary {
+      list-style: none;
+      background: none;
+      border: 1px solid var(--tooltip-bdr);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.2s;
+      user-select: none;
+    }
+    .export-wrap summary:hover { background: var(--tooltip-bdr); }
+    .export-wrap summary::-webkit-details-marker { display: none; }
+    .export-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      background: var(--tooltip-bg);
+      border: 0.5px solid var(--tooltip-bdr);
+      border-radius: 8px;
+      padding: 4px 0;
+      min-width: 210px;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    .export-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: none;
+      padding: 7px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .export-menu button:hover { background: var(--tooltip-bdr); }
+
+    /* ── Legend ────────────────────────────────────────────────────── */
+    #legend {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    #legend span { display: flex; align-items: center; gap: 5px; }
+    #legend .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+    /* ── Chart wrapper ─────────────────────────────────────────────── */
+    #chart { width: 80%; margin: 0 auto; }
+
+    /* ── Tooltip ───────────────────────────────────────────────────── */
+    #tooltip {
+      position: fixed;
+      background: var(--tooltip-bg);
+      border: 0.5px solid var(--tooltip-bdr);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--tooltip-txt);
+      pointer-events: none;
+      opacity: 0;
+      z-index: 999;
+      max-width: 210px;
+      transition: background 0.2s, color 0.2s;
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <details class="export-wrap" id="export-details">
+    <summary>↓ Export</summary>
+    <div class="export-menu">
+      <button onclick="exportFull();   document.getElementById('export-details').removeAttribute('open')">Full graph — SVG (140×80mm)</button>
+      <div style="padding:3px 14px 1px;font-size:10px;color:var(--text-muted);border-top:0.5px solid var(--tooltip-bdr);margin-top:2px;letter-spacing:0.03em;">Individual C1–C8 (74×40mm)</div>
+      <button onclick="exportAll();    document.getElementById('export-details').removeAttribute('open')" style="padding-left:22px;">→ as SVG</button>
+      <button onclick="exportAllPDF(); document.getElementById('export-details').removeAttribute('open')" style="padding-left:22px;">→ as PDF</button>
+      <button onclick="exportGrid();   document.getElementById('export-details').removeAttribute('open')" style="border-top:0.5px solid var(--tooltip-bdr);margin-top:2px;">Grid C1–C8 combined — SVG (124×202mm)</button>
+    </div>
+  </details>
+  <h2>Hover a challenge to highlight its chain and see solution coverage</h2>
+  <button id="toggle-btn" onclick="toggleTheme()">☀ Light / ☾ Dark</button>
+</div>
+
+<div id="legend">
+  <span><span class="dot" style="background:#4A7FA5;"></span>Challenges (C)</span>
+  <span><span class="dot" style="background:#D4741A;"></span>Requirements (R)</span>
+  <span><span class="dot" style="background:#3D8F56;"></span>Solutions (S)</span>
+</div>
+
+<div id="chart"></div>
+<div id="tooltip"></div>
+
+<script>
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+
+function toggleTheme() {
+  document.body.classList.toggle("dark");
+}
+
+// ── Data ──────────────────────────────────────────────────────────────────────
+
+const challenges   = ["C1","C2","C3","C4","C5","C6","C7","C8"];
+const requirements = ["R1","R2","R3","R4","R5","R6","R7","R8","R9","R10","R11"];
+const solutions    = ["S1","S2","S3","S4","S5","S6","S7"];
+
+const challengeLabels = {
+  C1:"Unstructured Data", C2:"Entity Identification and Serialization",
+  C3:"Data and Taxonomy Standardization", C4:"Data Quality",
+  C5:"Version History", C6:"System Integration",
+  C7:"Data Linkage", C8:"Semantic Richness",
+};
+const reqLabels = {
+  R1:"Data Schema Flexibility", R2:"Standard Data Model",
+  R3:"Data Preprocessing Capabilities", R4:"Globally Unique Data Identifier",
+  R5:"Data Quality Enforcement", R6:"Data Immutability and Provenance",
+  R7:"Metadata Support", R8:"Integration Interface",
+  R9:"Formal Relationships", R10:"Knowledge Formalization",
+  R11:"Query Capability",
+};
+const solLabels = {
+  S1:"Relational Database Management System",
+  S2:"Document-Oriented NoSQL Database",
+  S3:"Data Lakehouse with Data Catalog",
+  S4:"Asset Administration Shell",
+  S5:"Knowledge Graph w/o Ontology",
+  S6:"Knowledge Graph with Ontology",
+  S7:"Dataspace Management System (Nahshon Link)",
+};
+
+const mappingCR = {
+  C1:[1,1,1,0,1,0,1,1,0,0,0], C2:[0,1,0,1,0,1,1,1,0,0,0],
+  C3:[0,1,1,0,1,0,1,0,1,1,0], C4:[0,0,0,0,1,1,1,0,0,0,0],
+  C5:[0,1,0,0,0,1,1,0,0,0,0], C6:[1,1,1,0,1,0,1,1,1,1,0],
+  C7:[0,1,0,1,0,0,0,0,1,0,1], C8:[0,1,0,1,0,0,1,0,1,1,1],
+};
+const mappingRS = {
+  R1:[0,1,1,0,1,1,1], R2:[0,0,0,1,0,1,1], R3:[0,0,1,0,0,0,1],
+  R4:[0,0,0,1,1,1,1], R5:[1,0,0,1,0,1,1], R6:[0,0,1,0,0,0,1],
+  R7:[0,0,1,1,1,1,1], R8:[0,0,1,1,0,0,1], R9:[0,0,0,0,1,1,1],
+  R10:[0,0,0,0,0,1,1], R11:[1,0,1,0,1,1,1],
+};
+
+// ── Percentage matrix ─────────────────────────────────────────────────────────
+
+const pct = {};
+challenges.forEach(c => {
+  pct[c] = {};
+  const row  = mappingCR[c];
+  const total = row.reduce((s,v) => s+v, 0);
+  solutions.forEach((s, si) => {
+    if (!total) { pct[c][s] = 0; return; }
+    let n = 0;
+    requirements.forEach((r, ri) => { if (row[ri] && mappingRS[r][si]) n++; });
+    pct[c][s] = Math.round((n / total) * 100);
+  });
+});
+
+// ── Edges ─────────────────────────────────────────────────────────────────────
+
+const edgesCR = [], edgesRS = [];
+challenges.forEach(c => mappingCR[c].forEach((v,i) => { if(v) edgesCR.push({src:c, tgt:requirements[i]}); }));
+requirements.forEach(r => mappingRS[r].forEach((v,i) => { if(v) edgesRS.push({src:r, tgt:solutions[i]}); }));
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+
+const nodeW     = 60;
+const nodeH     = 28;
+const expandedW = 120;   // left half = nodeW (label), right half = nodeW (pct)
+const padTop    = 20;
+const W         = document.getElementById("chart").clientWidth || 900;
+
+function colY(nodes, h) {
+  const usable = h - 2 * padTop;
+  const gap    = usable / nodes.length;
+  return nodes.map((_, i) => padTop + gap * i + gap / 2);
+}
+
+const totalH    = Math.max(challenges.length, requirements.length, solutions.length) * 46 + 60;
+const colX      = { C: nodeW/2 + 10, R: W/2, S: W - nodeW/2 - 10 };
+const sLeft     = colX.S - nodeW/2;   // fixed left anchor for all S nodes
+const sDivX     = sLeft + nodeW;      // divider x (= original right edge = mid of expanded box)
+const sPctCenX  = sLeft + nodeW + nodeW/2; // centre of right half for pct text
+
+const cYs = colY(challenges,   totalH);
+const rYs = colY(requirements, totalH);
+const sYs = colY(solutions,    totalH);
+
+const nodePos = {};
+challenges.forEach((n,i)   => nodePos[n] = {x: colX.C, y: cYs[i]});
+requirements.forEach((n,i) => nodePos[n] = {x: colX.R, y: rYs[i]});
+solutions.forEach((n,i)    => nodePos[n] = {x: colX.S, y: sYs[i]});
+
+// ── SVG ───────────────────────────────────────────────────────────────────────
+
+const svg = d3.select("#chart").append("svg")
+  .attr("width",  W + nodeW + 10)
+  .attr("height", totalH)
+  .style("display", "block");
+
+// C→R edges
+edgesCR.forEach(e => {
+  const s = nodePos[e.src], t = nodePos[e.tgt];
+  const mx = (s.x + nodeW/2 + t.x - nodeW/2) / 2;
+  svg.append("path")
+    .attr("d",    `M${s.x+nodeW/2},${s.y} C${mx},${s.y} ${mx},${t.y} ${t.x-nodeW/2},${t.y}`)
+    .attr("fill", "none").attr("stroke", "var(--edge-cr)")
+    .attr("stroke-width", 1.2).attr("opacity", 0.4)
+    .attr("data-src", e.src).attr("data-tgt", e.tgt)
+    .attr("class", "edge edge-cr");
+});
+
+// R→S edges (arrive at sLeft)
+edgesRS.forEach(e => {
+  const s = nodePos[e.src], t = nodePos[e.tgt];
+  const mx = (s.x + nodeW/2 + sLeft) / 2;
+  svg.append("path")
+    .attr("d",    `M${s.x+nodeW/2},${s.y} C${mx},${s.y} ${mx},${t.y} ${sLeft},${t.y}`)
+    .attr("fill", "none").attr("stroke", "var(--edge-rs)")
+    .attr("stroke-width", 1.2).attr("opacity", 0.4)
+    .attr("data-src", e.src).attr("data-tgt", e.tgt)
+    .attr("class", "edge edge-rs");
+});
+
+// ── Color helpers ─────────────────────────────────────────────────────────────
+
+function colorFor(id) {
+  if (id.startsWith("C")) return "#4A7FA5";
+  if (id.startsWith("R")) return "#D4741A";
+  return "#3D8F56";
+}
+
+// Maps pct 0–100 to group opacity: 0% → 0.12 (dim), 1–100% → 0.70–1.0
+function pctToOpacity(p) { return p === 0 ? 0.12 : 0.70 + (p / 100) * 0.30; }
+
+const DIM = () => parseFloat(getComputedStyle(document.body).getPropertyValue("--dim")) || 0.12;
+
+const tooltip = d3.select("#tooltip");
+
+// ── Draw C and R nodes ────────────────────────────────────────────────────────
+
+[...challenges, ...requirements].forEach(id => {
+  const {x, y}   = nodePos[id];
+  const labelText = challengeLabels[id] || reqLabels[id] || "";
+  const g = svg.append("g").attr("class","node-g").attr("data-id",id).style("cursor","pointer");
+
+  g.append("rect")
+    .attr("x", x-nodeW/2).attr("y", y-nodeH/2)
+    .attr("width", nodeW).attr("height", nodeH).attr("rx", 5)
+    .attr("fill", colorFor(id)).attr("stroke", colorFor(id)).attr("stroke-width", 1);
+
+  g.append("text")
+    .attr("x", x).attr("y", y)
+    .attr("text-anchor","middle").attr("dominant-baseline","central")
+    .attr("fill","white").attr("font-size","11px").attr("font-weight","500")
+    .text(id);
+
+  g.on("mouseover", handleMouseover(id, labelText))
+   .on("mousemove", handleMousemove)
+   .on("mouseout",  handleMouseout);
+});
+
+// ── Draw S nodes (expandable) ─────────────────────────────────────────────────
+
+solutions.forEach(id => {
+  const {y}  = nodePos[id];
+  const lbl  = solLabels[id] || "";
+  const g    = svg.append("g").attr("class","node-g").attr("data-id",id).style("cursor","pointer");
+
+  // Main rect — left-anchored, expands right
+  g.append("rect").attr("class","s-rect")
+    .attr("x", sLeft).attr("y", y-nodeH/2)
+    .attr("width", nodeW).attr("height", nodeH).attr("rx", 5)
+    .attr("fill", colorFor(id)).attr("stroke", colorFor(id)).attr("stroke-width", 1);
+
+  // Divider line — appears on expand
+  g.append("line").attr("class","s-divider")
+    .attr("x1", sDivX).attr("y1", y-nodeH/2+3)
+    .attr("x2", sDivX).attr("y2", y+nodeH/2-3)
+    .attr("stroke","white").attr("stroke-width", 0.8)
+    .attr("opacity", 0);
+
+  // Label — centred in left half
+  g.append("text").attr("class","s-label")
+    .attr("x", sLeft+nodeW/2).attr("y", y)
+    .attr("text-anchor","middle").attr("dominant-baseline","central")
+    .attr("fill","white").attr("font-size","11px").attr("font-weight","500")
+    .text(id);
+
+  // Pct text — centred in right half
+  g.append("text").attr("class","s-pct-text")
+    .attr("x", sPctCenX).attr("y", y)
+    .attr("text-anchor","middle").attr("dominant-baseline","central")
+    .attr("fill","white").attr("font-size","11px").attr("font-weight","500")
+    .attr("opacity", 0).text("0%");
+
+  g.on("mouseover", handleMouseover(id, lbl))
+   .on("mousemove", handleMousemove)
+   .on("mouseout",  handleMouseout);
+});
+
+// ── Expand / collapse S nodes ─────────────────────────────────────────────────
+
+function expandSNodes(cId) {
+  solutions.forEach(sId => {
+    const p   = pct[cId][sId];
+    const op  = pctToOpacity(p);
+    const g   = svg.selectAll(".node-g").filter(function() {
+      return d3.select(this).attr("data-id") === sId;
+    });
+    // Override node opacity with pct-based value
+    g.attr("opacity", op);
+    // Expand rect
+    g.select(".s-rect").transition().duration(220).attr("width", expandedW).attr("rx", 5);
+    // Show divider
+    g.select(".s-divider").transition().duration(220).attr("opacity", 0.6);
+    // Show pct text
+    g.select(".s-pct-text").text(p + "%").transition().duration(220).attr("opacity", 1);
+  });
+}
+
+function collapseSNodes() {
+  solutions.forEach(sId => {
+    const g = svg.selectAll(".node-g").filter(function() {
+      return d3.select(this).attr("data-id") === sId;
+    });
+    g.select(".s-rect").transition().duration(200).attr("width", nodeW);
+    g.select(".s-divider").transition().duration(180).attr("opacity", 0);
+    g.select(".s-pct-text").transition().duration(150).attr("opacity", 0);
+  });
+}
+
+// ── Hover handlers ────────────────────────────────────────────────────────────
+
+function handleMouseover(id, labelText) {
+  return function(event) {
+    const connectedC = new Set(), connectedR = new Set(), connectedS = new Set();
+    const isC = id.startsWith("C"), isR = id.startsWith("R");
+
+    if (isC) {
+      connectedC.add(id);
+      edgesCR.filter(e => e.src === id).forEach(e => {
+        connectedR.add(e.tgt);
+        edgesRS.filter(r => r.src === e.tgt).forEach(r => connectedS.add(r.tgt));
+      });
+    } else if (isR) {
+      edgesCR.filter(e => e.tgt === id).forEach(e => connectedC.add(e.src));
+      edgesRS.filter(e => e.src === id).forEach(e => connectedS.add(e.tgt));
+      connectedR.add(id);
+    } else {
+      connectedS.add(id);
+      edgesRS.filter(e => e.tgt === id).forEach(e => {
+        connectedR.add(e.src);
+        edgesCR.filter(r => r.tgt === e.src).forEach(r => connectedC.add(r.src));
+      });
+    }
+
+    const active = new Set([id, ...connectedC, ...connectedR, ...connectedS]);
+    const dim    = DIM();
+
+    // Apply opacity to C and R nodes normally; S handled by expandSNodes if isC
+    svg.selectAll(".node-g").each(function() {
+      const nid = d3.select(this).attr("data-id");
+      if (!nid.startsWith("S")) {
+        d3.select(this).attr("opacity", active.has(nid) ? 1 : dim);
+      } else {
+        // For non-C hover, use standard active/dim for S too
+        if (!isC) d3.select(this).attr("opacity", active.has(nid) ? 1 : dim);
+      }
+    });
+
+    // Edge opacity
+    svg.selectAll(".edge-cr").each(function() {
+      const s = d3.select(this).attr("data-src"), t = d3.select(this).attr("data-tgt");
+      const on = connectedC.has(s) && connectedR.has(t);
+      d3.select(this).attr("opacity", on ? 0.9 : 0.03).attr("stroke-width", on ? 2 : 0.8);
+    });
+    svg.selectAll(".edge-rs").each(function() {
+      const s = d3.select(this).attr("data-src"), t = d3.select(this).attr("data-tgt");
+      const on = connectedR.has(s) && connectedS.has(t);
+      d3.select(this).attr("opacity", on ? 0.9 : 0.03).attr("stroke-width", on ? 2 : 0.8);
+    });
+
+    // Expand S nodes only on C hover (overrides opacity set above)
+    if (isC) expandSNodes(id);
+
+    tooltip.html(`<strong>${id}</strong><br>${labelText}`)
+      .style("opacity", 1)
+      .style("left", (event.clientX + 12) + "px")
+      .style("top",  (event.clientY - 28) + "px");
+  };
+}
+
+// ── SVG export ────────────────────────────────────────────────────────────────
+// Generates a self-contained SVG for a given challenge hover state.
+// Target size: 74mm × 40mm — viewBox uses mm units (1 unit = 1mm)
+// This ensures Inkscape/LaTeX renders text and stroke widths at the correct physical size.
+
+function generateHoverSVG(cId) {
+  // All values in mm
+  const W = 74, H = 40;
+  const nW = 7.0, nH = 2.8;   // node box size
+  const exW = nW * 2;          // expanded S (left=label, right=pct)
+  const padL = 1.0, padR = 1.0;
+  const padT = 0.8, padB = 0.8;
+  const FS   = 1.8;            // font-size in mm (≈5pt — fits nH=2.8mm with padding)
+  const tDy  = +(FS * 0.35).toFixed(3);  // baseline shift to centre cap-height in box
+
+  const COL  = {C:'#4A7FA5', R:'#D4741A', S:'#3D8F56'};
+  const E_CR = '#6a9ec0', E_RS = '#5aaa78';
+  const DIM  = 0.12;
+
+  // Column x-positions (mm)
+  const colCX  = padL + nW / 2;                      // C centre
+  const sLeft  = W - padR - exW;                     // S left edge
+  const colRX  = +((colCX + nW/2 + sLeft) / 2).toFixed(3); // R centre: midpoint C-right ↔ S-left
+  const sDivX  = sLeft + nW;                         // divider inside S box
+  const sPctCX = sDivX + nW / 2;                     // pct text centre
+
+  function makeYs(n) {
+    const usable = H - padT - padB, gap = usable / n;
+    return Array.from({length:n}, (_, i) => padT + gap * i + gap / 2);
+  }
+
+  const cYs = makeYs(challenges.length);
+  const rYs = makeYs(requirements.length);
+  const sYs = makeYs(solutions.length);
+
+  const pos = {};
+  challenges.forEach((n,i)   => pos[n] = {x: colCX,        y: cYs[i]});
+  requirements.forEach((n,i) => pos[n] = {x: colRX,        y: rYs[i]});
+  solutions.forEach((n,i)    => pos[n] = {x: sLeft + nW/2, y: sYs[i]});
+
+  // Connected nodes
+  const connC = new Set([cId]), connR = new Set(), connS = new Set();
+  edgesCR.filter(e=>e.src===cId).forEach(e=>{
+    connR.add(e.tgt);
+    edgesRS.filter(r=>r.src===e.tgt).forEach(r=>connS.add(r.tgt));
+  });
+
+  const f = n => +n.toFixed(3);
+
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" `
+        + `width="74mm" height="40mm" viewBox="0 0 74 40" `
+        + `font-family="Helvetica, Arial, sans-serif" font-size="${FS}">`
+        + `<rect width="74" height="40" fill="white"/>`;
+
+  // C→R edges
+  edgesCR.forEach(e=>{
+    const sp=pos[e.src], tp=pos[e.tgt];
+    const mx=f((sp.x+nW/2 + tp.x-nW/2) / 2);
+    const active=connC.has(e.src) && connR.has(e.tgt);
+    s+=`<path d="M${f(sp.x+nW/2)},${f(sp.y)} C${mx},${f(sp.y)} ${mx},${f(tp.y)} ${f(tp.x-nW/2)},${f(tp.y)}" `
+     + `fill="none" stroke="${E_CR}" stroke-width="${active?0.28:0.1}" opacity="${active?0.9:0.05}"/>`;
+  });
+
+  // R→S edges
+  edgesRS.forEach(e=>{
+    const sp=pos[e.src], tp=pos[e.tgt];
+    const mx=f((sp.x+nW/2 + sLeft) / 2);
+    const active=connR.has(e.src) && connS.has(e.tgt);
+    s+=`<path d="M${f(sp.x+nW/2)},${f(sp.y)} C${mx},${f(sp.y)} ${mx},${f(tp.y)} ${sLeft},${f(tp.y)}" `
+     + `fill="none" stroke="${E_RS}" stroke-width="${active?0.28:0.1}" opacity="${active?0.9:0.05}"/>`;
+  });
+
+  // C nodes
+  challenges.forEach(id=>{
+    const {x,y}=pos[id], op=connC.has(id)?1:DIM;
+    s+=`<g opacity="${op}">`
+     + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="0.5" `
+     +       `fill="${COL.C}" stroke="${COL.C}" stroke-width="0.1"/>`
+     + `<text x="${f(x)}" y="${f(y)}" dy="${tDy}" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+     + `</g>`;
+  });
+
+  // R nodes
+  requirements.forEach(id=>{
+    const {x,y}=pos[id], op=connR.has(id)?1:DIM;
+    s+=`<g opacity="${op}">`
+     + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="0.5" `
+     +       `fill="${COL.R}" stroke="${COL.R}" stroke-width="0.1"/>`
+     + `<text x="${f(x)}" y="${f(y)}" dy="${tDy}" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+     + `</g>`;
+  });
+
+  // S nodes — always expanded, opacity ∝ pct
+  solutions.forEach(id=>{
+    const {y}=pos[id], p=pct[cId][id];
+    const op=f(p === 0 ? DIM : 0.70 + (p / 100) * 0.30);
+    s+=`<g opacity="${op}">`
+     + `<rect x="${sLeft}" y="${f(y-nH/2)}" width="${exW}" height="${nH}" rx="0.5" `
+     +       `fill="${COL.S}" stroke="${COL.S}" stroke-width="0.1"/>`
+     + `<line x1="${sDivX}" y1="${f(y-nH/2+0.3)}" x2="${sDivX}" y2="${f(y+nH/2-0.3)}" `
+     +       `stroke="white" stroke-width="0.12" opacity="0.65"/>`
+     + `<text x="${f(sLeft+nW/2)}" y="${f(y)}" dy="${tDy}" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+     + `<text x="${f(sPctCX)}" y="${f(y)}" dy="${tDy}" text-anchor="middle" fill="white" font-weight="500">${p}%</text>`
+     + `</g>`;
+  });
+
+  s += `</svg>`;
+  return s;
+}
+
+function exportFull() {
+  const W=530, H=302;
+  const nW=44, nH=18;
+  const padT=18;   // top padding
+  const padB=28;   // bottom padding — reserved for legend
+  const padL=10;   // left padding
+  const padR=10;   // right padding
+
+  const COL  = {C:'#4A7FA5', R:'#D4741A', S:'#3D8F56'};
+  const E_CR = '#6a9ec0', E_RS = '#5aaa78';
+
+  const colCX = padL + nW/2;
+  const sLeft = W - padR - nW;
+  const colRX = Math.round((colCX + nW/2 + sLeft) / 2);  // midpoint C-right to S-left
+  const f = n => +n.toFixed(2);
+
+  function makeYs(n) {
+    const usable = H - padT - padB, gap = usable/n;
+    return Array.from({length:n}, (_,i) => padT + gap*i + gap/2);
+  }
+
+  const cYs = makeYs(challenges.length);
+  const rYs = makeYs(requirements.length);
+  const sYs = makeYs(solutions.length);
+
+  const pos = {};
+  challenges.forEach((n,i)   => pos[n] = {x:colCX,          y:cYs[i]});
+  requirements.forEach((n,i) => pos[n] = {x:colRX,          y:rYs[i]});
+  solutions.forEach((n,i)    => pos[n] = {x:sLeft + nW/2,   y:sYs[i]});
+
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" `
+        + `width="140mm" height="80mm" viewBox="0 0 ${W} ${H}" `
+        + `font-family="Helvetica, Arial, sans-serif" font-size="11">`
+        + `<rect width="${W}" height="${H}" fill="white"/>`;
+
+  // C→R edges
+  edgesCR.forEach(e => {
+    const sp=pos[e.src], tp=pos[e.tgt];
+    const mx=f((sp.x+nW/2+tp.x-nW/2)/2);
+    s+=`<path d="M${f(sp.x+nW/2)},${f(sp.y)} C${mx},${f(sp.y)} ${mx},${f(tp.y)} ${f(tp.x-nW/2)},${f(tp.y)}" `
+     + `fill="none" stroke="${E_CR}" stroke-width="0.8" opacity="0.45"/>`;
+  });
+
+  // R→S edges
+  edgesRS.forEach(e => {
+    const sp=pos[e.src], tp=pos[e.tgt];
+    const mx=f((sp.x+nW/2+sLeft)/2);
+    s+=`<path d="M${f(sp.x+nW/2)},${f(sp.y)} C${mx},${f(sp.y)} ${mx},${f(tp.y)} ${sLeft},${f(tp.y)}" `
+     + `fill="none" stroke="${E_RS}" stroke-width="0.8" opacity="0.45"/>`;
+  });
+
+  // C nodes
+  challenges.forEach(id => {
+    const {x,y}=pos[id];
+    s+=`<g>`
+     + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="4" `
+     +       `fill="${COL.C}" stroke="${COL.C}" stroke-width="0.5"/>`
+     + `<text x="${f(x)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+     + `</g>`;
+  });
+
+  // R nodes
+  requirements.forEach(id => {
+    const {x,y}=pos[id];
+    s+=`<g>`
+     + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="4" `
+     +       `fill="${COL.R}" stroke="${COL.R}" stroke-width="0.5"/>`
+     + `<text x="${f(x)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+     + `</g>`;
+  });
+
+  // S nodes (not expanded)
+  solutions.forEach(id => {
+    const {x,y}=pos[id];
+    s+=`<g>`
+     + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="4" `
+     +       `fill="${COL.S}" stroke="${COL.S}" stroke-width="0.5"/>`
+     + `<text x="${f(x)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+     + `</g>`;
+  });
+
+  // Legend — left-aligned at padL, sitting in the bottom reserved space
+  const legendItems = [
+    {col:'#4A7FA5', label:'Challenges (C)'},
+    {col:'#D4741A', label:'Requirements (R)'},
+    {col:'#3D8F56', label:'Solutions (S)'},
+  ];
+  const itemW  = 130;
+  const startX = padL;
+  const legY   = H - padB/2;
+  legendItems.forEach((item, i) => {
+    const ix = f(startX + i * itemW);
+    s += `<rect x="${ix}" y="${f(legY - 5)}" width="9" height="9" rx="2" fill="${item.col}"/>`;
+    s += `<text x="${f(+ix + 13)}" y="${f(legY)}" dy="3.85" fill="#444">${item.label}</text>`;
+  });
+
+  s += `</svg>`;
+
+  const blob = new Blob([s], {type:'image/svg+xml'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'flowchart_full.svg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function exportGrid() {
+  // ── Outer canvas dimensions ───────────────────────────────────────────────
+  // 0.8×155mm wide, 0.9×225mm tall  →  124mm × 202.5mm
+  // viewBox in px at 96dpi (1mm = 96/25.4 px):
+  const mmToPx = 96 / 25.4;
+  const GW = Math.round(0.8 * 155 * mmToPx);  // ≈ 469
+  const GH = Math.round(0.9 * 225 * mmToPx);  // ≈ 765
+
+  // ── Grid layout ───────────────────────────────────────────────────────────
+  const COLS   = 2, ROWS = 4;
+  const GAPX   = 10, GAPY = 10;   // gaps between cells
+  const LEGH   = 30;              // legend strip at very bottom
+  const TITLH  = 14;              // title height above each chart
+
+  const cellW  = Math.floor((GW - (COLS - 1) * GAPX) / COLS);
+  const gridH  = GH - LEGH;
+  const cellH  = Math.floor((gridH - (ROWS - 1) * GAPY) / ROWS);
+  const chartH = cellH - TITLH;
+
+  // ── Per-cell chart constants (same coord space as generateHoverSVG) ───────
+  const VW = 530, VH = 302;      // viewBox of each sub-chart
+  const nW = 44, nH = 18;
+  const exW = 88;
+  const padT = 14;
+  const COL   = {C:'#4A7FA5', R:'#D4741A', S:'#3D8F56'};
+  const E_CR  = '#6a9ec0', E_RS = '#5aaa78';
+  const DIM   = 0.12;
+  const f = n => +n.toFixed(2);
+
+  const colCX  = nW/2 + 8;
+  const sLeft  = VW - exW - 2;
+  const colRX  = Math.round((colCX + nW/2 + sLeft) / 2);  // midpoint C-right to S-left
+  const sDivX  = sLeft + nW;
+  const sPctCX = sDivX + nW/2;
+
+  function makeYs(n) {
+    const usable = VH - 2*padT, gap = usable/n;
+    return Array.from({length:n}, (_,i) => padT + gap*i + gap/2);
+  }
+  const cYs = makeYs(challenges.length);
+  const rYs = makeYs(requirements.length);
+  const sYs = makeYs(solutions.length);
+
+  // ── Build outer SVG ───────────────────────────────────────────────────────
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" `
+        + `width="${(0.8*155).toFixed(1)}mm" height="${(0.9*225).toFixed(1)}mm" `
+        + `viewBox="0 0 ${GW} ${GH}" `
+        + `font-family="Helvetica, Arial, sans-serif" font-size="11">`
+        + `<rect width="${GW}" height="${GH}" fill="white"/>`;
+
+  // ── One cell per challenge ─────────────────────────────────────────────────
+  challenges.forEach((cId, idx) => {
+    const col  = idx % COLS;
+    const row  = Math.floor(idx / COLS);
+    const cx   = col * (cellW + GAPX);                // cell left edge
+    const cy   = row * (cellH + GAPY);                // cell top edge
+    const titY = cy + TITLH - 1;                      // title baseline — close to chart
+
+    // Connected nodes
+    const connC = new Set([cId]), connR = new Set(), connS = new Set();
+    edgesCR.filter(e => e.src === cId).forEach(e => {
+      connR.add(e.tgt);
+      edgesRS.filter(r => r.src === e.tgt).forEach(r => connS.add(r.tgt));
+    });
+
+    // ── Cell border box ──────────────────────────────────────────────────────
+    s += `<rect x="${cx}" y="${cy}" width="${cellW}" height="${cellH}" `
+       + `fill="none" stroke="#000" stroke-width="0.5"/>`;
+
+    // ── Cell title ──────────────────────────────────────────────────────────
+    const cNum = cId.replace('C','');
+    s += `<text x="${f(cx + cellW/2)}" y="${f(titY)}" text-anchor="middle" `
+       + `font-weight="500" fill="#333">Challenge ${cNum}</text>`;
+
+    // ── Nested SVG (auto-scales VW×VH → cellW×chartH) ───────────────────────
+    s += `<svg x="${cx}" y="${f(cy + TITLH)}" width="${cellW}" height="${chartH}" `
+       + `viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet">`;
+    s += `<rect width="${VW}" height="${VH}" fill="white"/>`;
+
+    // C→R edges
+    edgesCR.forEach(e => {
+      const sp={x:colCX, y:cYs[challenges.indexOf(e.src)]};
+      const tp={x:colRX, y:rYs[requirements.indexOf(e.tgt)]};
+      const mx=f((sp.x+nW/2+tp.x-nW/2)/2);
+      const active=connC.has(e.src)&&connR.has(e.tgt);
+      s+=`<path d="M${f(sp.x+nW/2)},${f(sp.y)} C${mx},${f(sp.y)} ${mx},${f(tp.y)} ${f(tp.x-nW/2)},${f(tp.y)}" `
+       + `fill="none" stroke="${E_CR}" stroke-width="${active?1.8:0.7}" opacity="${active?0.9:0.05}"/>`;
+    });
+
+    // R→S edges
+    edgesRS.forEach(e => {
+      const sp={x:colRX, y:rYs[requirements.indexOf(e.src)]};
+      const tp={x:sLeft+nW/2, y:sYs[solutions.indexOf(e.tgt)]};
+      const mx=f((sp.x+nW/2+sLeft)/2);
+      const active=connR.has(e.src)&&connS.has(e.tgt);
+      s+=`<path d="M${f(sp.x+nW/2)},${f(sp.y)} C${mx},${f(sp.y)} ${mx},${f(tp.y)} ${sLeft},${f(tp.y)}" `
+       + `fill="none" stroke="${E_RS}" stroke-width="${active?1.8:0.7}" opacity="${active?0.9:0.05}"/>`;
+    });
+
+    // C nodes
+    challenges.forEach((id,i) => {
+      const x=colCX, y=cYs[i], op=connC.has(id)?1:DIM;
+      s+=`<g opacity="${op}">`
+       + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="4" fill="${COL.C}" stroke="${COL.C}" stroke-width="0.5"/>`
+       + `<text x="${f(x)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+       + `</g>`;
+    });
+
+    // R nodes
+    requirements.forEach((id,i) => {
+      const x=colRX, y=rYs[i], op=connR.has(id)?1:DIM;
+      s+=`<g opacity="${op}">`
+       + `<rect x="${f(x-nW/2)}" y="${f(y-nH/2)}" width="${nW}" height="${nH}" rx="4" fill="${COL.R}" stroke="${COL.R}" stroke-width="0.5"/>`
+       + `<text x="${f(x)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+       + `</g>`;
+    });
+
+    // S nodes — expanded, opacity ∝ pct
+    solutions.forEach((id,i) => {
+      const y=sYs[i], p=pct[cId][id];
+      const op=f(DIM+(p/100)*(1-DIM));
+      s+=`<g opacity="${op}">`
+       + `<rect x="${sLeft}" y="${f(y-nH/2)}" width="${exW}" height="${nH}" rx="4" fill="${COL.S}" stroke="${COL.S}" stroke-width="0.5"/>`
+       + `<line x1="${sDivX}" y1="${f(y-nH/2+2)}" x2="${sDivX}" y2="${f(y+nH/2-2)}" stroke="white" stroke-width="0.7" opacity="0.65"/>`
+       + `<text x="${f(sLeft+nW/2)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${id}</text>`
+       + `<text x="${f(sPctCX)}" y="${f(y)}" dy="3.85" text-anchor="middle" fill="white" font-weight="500">${p}%</text>`
+       + `</g>`;
+    });
+
+    s += `</svg>`;  // close nested SVG
+  });
+
+  // ── Shared legend at very bottom ──────────────────────────────────────────
+  const legendItems = [
+    {col:'#4A7FA5', label:'Challenges (C)'},
+    {col:'#D4741A', label:'Requirements (R)'},
+    {col:'#3D8F56', label:'Solutions (S)'},
+  ];
+  const itemW  = 130;
+  const legX   = f((GW - legendItems.length * itemW) / 2);
+  const legY   = GH - LEGH/2;
+  legendItems.forEach((item, i) => {
+    const ix = f(+legX + i * itemW);
+    s += `<rect x="${ix}" y="${f(legY-5)}" width="9" height="9" rx="2" fill="${item.col}"/>`;
+    s += `<text x="${f(+ix+13)}" y="${f(legY)}" dy="3.85" fill="#444">${item.label}</text>`;
+  });
+
+  s += `</svg>`;
+
+  const blob = new Blob([s], {type:'image/svg+xml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flowchart_grid.svg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+// ── PDF export helpers ────────────────────────────────────────────────────────
+
+async function exportAllPDF() {
+  // Build a single print document with 8 pages (one per challenge, 74×40mm each).
+  // Uses the browser's native print engine — exact vector output, no external libraries.
+  let html = `<!DOCTYPE html><html><head>
+<style>
+  @page { size: 74mm 40mm; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: white; }
+  .page {
+    width: 74mm; height: 40mm;
+    overflow: hidden;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+  .page:last-child { page-break-after: avoid; }
+  svg { display: block; width: 74mm !important; height: 40mm !important; }
+  .hint {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 12px; color: #555;
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .hint button {
+    padding: 5px 14px; font-size: 12px; cursor: pointer;
+    border: 1px solid #aaa; border-radius: 4px; background: white;
+  }
+  @media print { .hint { display: none; } }
+</style>
+</head><body>
+<div class="hint">
+  8 challenges on 8 pages (74×40mm). Save as PDF via the print dialog.
+  <button onclick="window.print()">Print / Save as PDF</button>
+</div>`;
+
+  challenges.forEach(cId => {
+    html += `<div class="page">${generateHoverSVG(cId)}</div>`;
+  });
+
+  html += `</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Pop-up blocked — please allow pop-ups for this page and try again.');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+  // Give the SVGs a moment to render before triggering print
+  setTimeout(() => win.print(), 600);
+}
+
+function exportAll() {
+  challenges.forEach((cId, i) => {
+    setTimeout(() => {
+      const blob = new Blob([generateHoverSVG(cId)], {type:'image/svg+xml'});
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = `flowchart_${cId}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }, i * 350);  // stagger to avoid browser blocking multiple downloads
+  });
+}
+
+function handleMousemove(event) {
+  tooltip.style("left",(event.clientX+12)+"px").style("top",(event.clientY-28)+"px");
+}
+
+function handleMouseout() {
+  svg.selectAll(".node-g").attr("opacity", 1);
+  svg.selectAll(".edge").attr("opacity", 0.4).attr("stroke-width", 1.2);
+  tooltip.style("opacity", 0);
+  collapseSNodes();
+}
+</script>
+</body>
+</html>
